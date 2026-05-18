@@ -1,0 +1,20 @@
+{
+    "title": "Aldi Talk",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Aldi Talk",
+                "data": {
+                    "username": "Benutzername",
+                    "password": "Passwort"
+                }
+            }
+        },
+        "abort": {
+            "already_configured": "Gerät ist bereits konfiguriert"
+        },
+        "error": {
+            "invalid_auth": "Ungültiger Benutzername oder Passwort"
+        }
+    }
+}

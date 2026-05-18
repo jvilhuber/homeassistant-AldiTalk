@@ -3,15 +3,15 @@
 This custom component for Home Assistant allows users to access their Aldi Talk account data directly within Home Assistant, providing a convenient way to monitor account details such as account balance, data volume, and validity periods.
 
 ![Version](https://img.shields.io/github/v/release/JonasJoKuJonas/homeassistant-AldiTalk)
-[![Downloads](https://img.shields.io/github/downloads/JonasJoKuJonas/homeassistant-AldiTalk/total)](https://tooomm.github.io/github-release-stats/?username=JonasJoKuJonas&repository=HomeAssistant-AldiTalk)
-
-
+[![Downloads](https://img.shields.io/github/downloads/JonasJoKuJonas/homeassistant-AldiTalk/total)](https://tooomm.github.io/github-release-stats/?username=JonasJoKuJonas&repository=homeassistant-AldiTalk)
+![HACS Install Badge](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=integration%20installations&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.aldi_talk.total)
+[![Latest Release](https://img.shields.io/github/release-date/JonasJoKuJonas/homeassistant-AldiTalk?style=flat&label=Latest%20Release)](https://github.com/JonasJoKuJonas/homeassistant-Aldi-Talk/releases)
+[![Open Issues](https://img.shields.io/github/issues/JonasJoKuJonas/homeassistant-AldiTalk?style=flat&label=Open%20Issues)](https://github.com/JonasJoKuJonas/homeassistant-AldiTalk/issues)
 
 ## Disclaimer
 
 This component uses web scraping, not an official Aldi Talk API. It may be subject to errors or changes in Aldi Talk's website structure that could affect functionality.
 Use this component at your own risk, understanding potential risks including account issues or violations of Aldi Talk's terms. The developers are not affiliated with Aldi Talk and are not liable for any damages resulting from its use. Your use indicates acceptance of these risks.
-
 
 ## Instalation
 
@@ -30,13 +30,13 @@ Use this component at your own risk, understanding potential risks including acc
 
 This component provides access to the following sensors within Home Assistant, allowing you to monitor various aspects of your Aldi Talk account:
 
-| Sensor Name           | Description                      | Domain                         |
-| --------------------- | -------------------------------- | ------------------------------ |
-| Account Balance       | The current account balance.     | `sensor.account_balance`       |
-| Start Day             | The start date of the plan.      | `sensor.start_day`             |
-| End Day               | The expiration date of the plan. | `sensor.end_day`               |
-| Total Data Volume     | Total data volume available.     | `sensor.total_data_volume`     |
-| Remaining Data Volume | Data volume remaining.           | `sensor.remaining_data_volume` |
+| Sensor Name           | Description                      | Domain                                |
+| --------------------- | -------------------------------- | ------------------------------------- |
+| Account Balance       | The current account balance.     | `sensor.<name>_account_balance`       |
+| Start Day             | The start date of the plan.      | `sensor.<name>_start_day`             |
+| End Day               | The expiration date of the plan. | `sensor.<name>_end_day`               |
+| Total Data Volume     | Total data volume available.     | `sensor.<name>_total_data_volume`     |
+| Remaining Data Volume | Data volume remaining.           | `sensor.<name>_remaining_data_volume` |
 
 The data will update every 30 minutes.
 
