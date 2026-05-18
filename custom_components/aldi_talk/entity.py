@@ -14,13 +14,16 @@ class AldiTalkCoordinatorEntity(CoordinatorEntity):
         """Initialize the Trias base entity."""
         super().__init__(coordinator)
         self._key = sensor["key"]
-        self._attr_unique_id = f"{coordinator.config["username"]}_{sensor['key']}"
+        stable_id = coordinator.config.get("contract_id") or coordinator.config.get(
+            "username"
+        )
+        self._attr_unique_id = f"{stable_id}_{sensor['key']}"
         self._attr_name = sensor["name"]
         self._attr_icon = sensor["icon"]
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.config["username"])},
+            identifiers={(DOMAIN, stable_id)},
             manufacturer="Aldi Talk",
-            name=coordinator.config["username"],
+            name=stable_id,
         )
 
     @property

@@ -21,10 +21,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator = AldiTalkCoordinator(
-        hass,
-        entry,
-    )
+    coordinator = AldiTalkCoordinator(hass, entry)
+
+    # Store coordinator for backwards compatibility and in entry.runtime_data
+    hass.data[DOMAIN][entry.entry_id] = coordinator
+    try:
+        entry.runtime_data["coordinator"] = coordinator
+    except AttributeError:
+        # Older HA versions may not support runtime_data assignment
+        pass
 
     await coordinator.async_config_entry_first_refresh()
 
