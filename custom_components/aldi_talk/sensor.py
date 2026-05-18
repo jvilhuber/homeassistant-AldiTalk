@@ -81,7 +81,7 @@ class VolumeSensor(AldiTalkCoordinatorEntity, SensorEntity):
         super().__init__(coordinator, sensor)
 
         self._attr_device_class = SensorDeviceClass.DATA_SIZE
-        self._attr_native_unit_of_measurement = UnitOfInformation.MEGABYTES
+        self._attr_native_unit_of_measurement = UnitOfInformation.GIGABYTES
 
 
 class RemainingVolumeSensor(VolumeSensor):
