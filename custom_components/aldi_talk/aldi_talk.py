@@ -1,172 +1,399 @@
+import base64
+import hashlib
+import json
 import logging
+import re
 from datetime import datetime, timedelta
+from urllib.parse import urljoin
 
 import requests
-from bs4 import BeautifulSoup
 
-# Constants
-LOGIN_URL = "https://login.alditalk-kundenbetreuung.de/sso/UI/Login"
-DASHBOARD_URL = "https://www.alditalk-kundenbetreuung.de/de/"
-DATE_FORMAT = "%d.%m.%Y %H:%M"
-DEFAULT_UPDATE = False
+PORTAL_BASE = "https://www.alditalk-kundenportal.de"
+AUTH_BASE = "https://login.alditalk-kundenbetreuung.de"
+AUTH_API = f"{AUTH_BASE}/signin/json/authenticate"
+REALM = "/alditalk"
+SERVICE = "Login"
+PORTAL_OVERVIEW_URL = f"{PORTAL_BASE}/portal/auth/uebersicht/"
+
+BFF207 = "/scs/bff/scs-207-customer-master-data-bff/customer-master-data"
+BFF209 = "/scs/bff/scs-209-selfcare-dashboard-bff/selfcare-dashboard"
+BFF215 = "/scs/bff/scs-215-manage-topup-bff/manage-topup"
 
 
 class AldiTalk:
-    """Class for interacting with AldiTalk service."""
+    """Class for interacting with the Aldi Talk portal."""
 
     def __init__(self, username: str, password: str):
-        """
-        Initialize AldiTalk instance.
-
-        Args:
-            username (str): Username for AldiTalk login.
-            password (str): Password for AldiTalk login.
-        """
         self.username = username
         self.password = password
         self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                ),
+                "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            }
+        )
         self.logger = logging.getLogger(__name__)
         self._account_balance = None
         self._remaining_data_volume = None
         self._total_data_volume = None
+        self._start_date = None
         self._end_date = None
 
-    def _login(self):
-        """Perform login."""
-        self.logger.debug("Attempting login...")
+    def _portal_json_headers(self):
+        return {
+            "Accept": "application/json, text/plain, */*",
+            "Referer": PORTAL_OVERVIEW_URL,
+        }
+
+    def _auth_headers(self):
+        return {
+            "Accept-API-Version": "protocol=1.0,resource=2.1",
+            "Content-Type": "application/json",
+            "X-Username": "anonymous",
+            "X-Password": "anonymous",
+            "X-NoSession": "true",
+            "Origin": AUTH_BASE,
+            "Referer": f"{AUTH_BASE}/signin/XUI/",
+        }
+
+    def _start_portal_flow(self):
+        self.logger.debug("Starting portal-auth flow")
+        self.session.get(PORTAL_OVERVIEW_URL, allow_redirects=True, timeout=15)
+
+    def _fetch_auth_callbacks(self):
+        self.logger.debug("Fetching ForgeRock callback tree")
         response = self.session.post(
-            LOGIN_URL, data={"IDToken1": self.username, "IDToken2": self.password}
+            AUTH_API,
+            params={
+                "realm": REALM,
+                "authIndexType": "service",
+                "authIndexValue": SERVICE,
+            },
+            json={},
+            headers=self._auth_headers(),
+            timeout=15,
         )
-        if "Rufnummer und/oder Passwort falsch." in response.text:
-            self.logger.error("Login failed: Invalid username or password.")
-            raise ValueError("Invalid username or password.")
-        self.logger.debug("Login response: %s", response.status_code)
+        response.raise_for_status()
 
-    def _fetch_dashboard(self):
-        """Fetch dashboard HTML."""
-        self.logger.debug("Fetching dashboard...")
-        if not self.logged_in():
-            self._login()
-        return self.session.get(DASHBOARD_URL)
+        payload = response.json()
+        auth_id = payload.get("authId")
+        callbacks = payload.get("callbacks")
+        if not auth_id or callbacks is None:
+            raise RuntimeError("Unexpected authentication response from Aldi Talk.")
+        return auth_id, callbacks
 
-    def _parse_dashboard(self, dashboard):
-        """Parse dashboard HTML."""
-        soup = BeautifulSoup(dashboard.content, "html.parser")
-        self._account_balance = self._extract_account_balance(soup)
-        self._remaining_data_volume = self._extract_usage_remaining(soup)
-        self._total_data_volume = self._extract_usage_total(soup)
-        self._end_date = self._extract_end_date(soup)
+    def _extract_pow_info(self, callbacks):
+        for callback in callbacks:
+            if callback.get("type") != "TextOutputCallback":
+                continue
 
-    def _extract_account_balance(self, soup):
-        """Extract account balance from parsed HTML."""
-        account_balance_element = soup.find(
-            "div", id="ajaxReplaceQuickInfoBoxBalanceId"
-        )
-        if account_balance_element:
-            try:
-                return float(
-                    account_balance_element.find("p")
-                    .text.strip()
-                    .replace(",", ".")
-                    .replace("€", "")
+            message = next(
+                (
+                    output.get("value", "")
+                    for output in callback.get("output", [])
+                    if output.get("name") == "message"
+                ),
+                "",
+            )
+            work_match = re.search(r'var work\s*=\s*"([^"]+)"', message)
+            difficulty_match = re.search(r"var difficulty\s*=\s*(\d+)", message)
+            if work_match:
+                difficulty = int(difficulty_match.group(1)) if difficulty_match else 3
+                return work_match.group(1), difficulty
+
+        return None, 3
+
+    def _solve_pow(self, work, difficulty):
+        prefix = "0" * difficulty
+        nonce = 0
+        while True:
+            digest = hashlib.sha1(f"{work}{nonce}".encode()).hexdigest()
+            if digest.startswith(prefix):
+                return str(nonce)
+            nonce += 1
+
+    def _fill_callbacks(self, callbacks, pow_solution):
+        for callback in callbacks:
+            callback_type = callback.get("type", "")
+            inputs = callback.get("input", [])
+            outputs = callback.get("output", [])
+
+            if callback_type == "HiddenValueCallback":
+                is_pow_callback = any(
+                    output.get("name") == "id"
+                    and output.get("value") == "proofOfWorkNonce"
+                    for output in outputs
                 )
-            except ValueError:
-                self.logger.error("Failed to parse account balance.")
-        else:
-            self.logger.error("Failed to find account balance element.")
-        return None
+                if is_pow_callback:
+                    for item in inputs:
+                        item["value"] = pow_solution
+                    continue
 
-    def _extract_usage_remaining(self, soup):
-        """Extract remaining data usage from parsed HTML."""
-        try:
-            usage_remaining = (
-                soup.find("td", class_="pack__usage", colspan="2")
-                .find("span", class_="pack__usage-remaining")
-                .text
-            )
+                fallback_value = next(
+                    (
+                        output.get("value")
+                        for output in outputs
+                        if output.get("name") == "value"
+                    ),
+                    None,
+                )
+                if fallback_value is not None:
+                    for item in inputs:
+                        item["value"] = fallback_value
+                continue
 
-            unit = (
-                soup.find("td", class_="pack__usage", colspan="2")
-                .find("span", class_="pack__usage-unit")
-                .text
-            )
-        except AttributeError:
-            self.logger.error("Failed to find remaining data usage element.")
+            if callback_type == "NameCallback":
+                for item in inputs:
+                    item["value"] = self.username
+                continue
+
+            if callback_type == "PasswordCallback":
+                for item in inputs:
+                    item["value"] = self.password
+                continue
+
+            if callback_type == "ConfirmationCallback":
+                for item in inputs:
+                    item["value"] = 2
+
+        return callbacks
+
+    def _submit_credentials(self, auth_id, callbacks):
+        self.logger.debug("Submitting credentials")
+        response = self.session.post(
+            AUTH_API,
+            params={
+                "realm": REALM,
+                "authIndexType": "service",
+                "authIndexValue": SERVICE,
+            },
+            json={"authId": auth_id, "callbacks": callbacks},
+            headers=self._auth_headers(),
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _follow_success_url(self, success_url):
+        if not success_url:
+            raise RuntimeError("Authentication did not return a success URL.")
+
+        resolved_url = (
+            success_url
+            if success_url.startswith("http")
+            else urljoin(AUTH_BASE, success_url)
+        )
+        self.session.headers.update({"Accept": "text/html,application/xhtml+xml,*/*"})
+        self.session.get(resolved_url, allow_redirects=True, timeout=15)
+
+    def _verify_logged_in(self):
+        response = self.session.get(
+            PORTAL_OVERVIEW_URL, allow_redirects=False, timeout=15
+        )
+        if response.status_code in (301, 302, 303, 307, 308):
+            location = response.headers.get("Location", "")
+            if (
+                AUTH_BASE in location
+                or "login" in location.lower()
+                or "signin" in location.lower()
+            ):
+                raise ValueError(
+                    "Login failed: portal redirected back to the auth server."
+                )
+
+    def _login(self):
+        self.logger.debug("Attempting Aldi Talk OAuth login")
+        self._start_portal_flow()
+        auth_id, callbacks = self._fetch_auth_callbacks()
+        pow_work, pow_difficulty = self._extract_pow_info(callbacks)
+        pow_solution = self._solve_pow(pow_work, pow_difficulty) if pow_work else "0"
+        callbacks = self._fill_callbacks(callbacks, pow_solution)
+        result = self._submit_credentials(auth_id, callbacks)
+
+        success_url = result.get("successUrl")
+        if not success_url:
+            reason = result.get("message") or result.get("detail") or json.dumps(result)
+            if (
+                "passwort" in reason.lower()
+                or "password" in reason.lower()
+                or "login" in reason.lower()
+            ):
+                raise ValueError(f"Login rejected: {reason}")
+            raise RuntimeError(f"Login failed: {reason}")
+
+        self._follow_success_url(success_url)
+        self._verify_logged_in()
+
+    def _parse_datetime(self, value):
+        if not value:
             return None
 
-        try:
-            usage_remaining = float(usage_remaining.strip().replace(",", "."))
-            if unit == "GB":
-                usage_remaining *= 1000
-            return usage_remaining
-        except ValueError:
-            self.logger.error("Failed to parse remaining data usage.")
-        return None
-
-    def _extract_usage_total(self, soup):
-        """Extract total data usage from parsed HTML."""
-        try:
-            usage_total = (
-                soup.find("td", class_="pack__usage", colspan="2")
-                .find("span", class_="oftotal")
-                .find("span", class_="pack__usage-total")
-                .text
-            )
-
-            unit = (
-                soup.find("td", class_="pack__usage", colspan="2")
-                .find("span", class_="oftotal")
-                .find("span", class_="pack__usage-unit")
-                .text
-            )
-
-            usage_total = float(usage_total.strip().replace(",", "."))
-            if unit == "GB":
-                usage_total *= 1000
-            return usage_total
-        except ValueError:
-            self.logger.error("Failed to parse total data usage.")
-        except AttributeError:
-            self.logger.error("Failed to find total data usage element.")
-        return None
-
-    def _extract_end_date(self, soup):
-        """Extract end date from parsed HTML."""
-        end_date_element = soup.find(
-            "tr", class_="t-row pack__panel pack__panel--end-date"
-        )
-        if end_date_element:
-            end_date_text = end_date_element.find("td", colspan="2").text.strip()
-            end_date_text = (
-                end_date_text.split(",")[1].strip().split()[0]
-                + " "
-                + end_date_text.split(",")[1].strip().split()[1]
-            )
+        text = str(value).strip()
+        for candidate in (text, text.replace("Z", "+00:00")):
             try:
-                return datetime.strptime(end_date_text, DATE_FORMAT).astimezone()
+                return datetime.fromisoformat(candidate).astimezone()
             except ValueError:
-                self.logger.error("Failed to parse end date.")
-        else:
-            self.logger.error("Failed to find end date element.")
+                pass
+
+        for date_format in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%d.%m.%Y %H:%M",
+        ):
+            try:
+                return datetime.strptime(text, date_format).astimezone()
+            except ValueError:
+                continue
+
+        self.logger.debug("Could not parse date value: %s", value)
         return None
+
+    def _decode_msisdn(self):
+        lgrs_id = self.session.cookies.get("lgrs_id", "")
+        if not lgrs_id:
+            return ""
+
+        padded = lgrs_id + ("=" * (-len(lgrs_id) % 4))
+        try:
+            return base64.b64decode(padded).decode()
+        except (ValueError, UnicodeDecodeError):
+            self.logger.debug("Unable to decode lgrs_id cookie")
+            return ""
+
+    def _request_portal_json(self, path, params=None):
+        response = self.session.get(
+            PORTAL_BASE + path,
+            params=params or {},
+            allow_redirects=True,
+            timeout=15,
+            headers=self._portal_json_headers(),
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _get_contract_id(self):
+        params = {}
+        msisdn = self._decode_msisdn()
+        if msisdn:
+            params["msisdn"] = msisdn
+
+        payload = self._request_portal_json(
+            f"{BFF207}/v1/navigation-list", params=params
+        )
+        subscriptions = payload.get("userDetails", {}).get("subscriptions", [])
+        if not subscriptions:
+            raise RuntimeError(
+                "No Aldi Talk subscription found in navigation-list response."
+            )
+
+        contract_id = subscriptions[0].get("contractId")
+        if not contract_id:
+            raise RuntimeError("navigation-list response did not contain a contractId.")
+        return contract_id
+
+    def get_contract_id(self):
+        """Public accessor for contract id."""
+        return self._get_contract_id()
+
+    def _get_balance_value(self, contract_id):
+        payload = self._request_portal_json(f"{BFF215}/v1/totalBalance/{contract_id}")
+        balance = payload.get("totalBalance")
+        if balance is None:
+            raise RuntimeError("totalBalance response did not contain a balance value.")
+        return float(balance)
+
+    def _get_data_entries(self, contract_id):
+        payload = self._request_portal_json(
+            f"{BFF209}/v1/offers",
+            params={"contractId": contract_id, "productType": ""},
+        )
+
+        entries = []
+        for offer in payload.get("subscribedOffers", []):
+            for pack in offer.get("pack", []):
+                if pack.get("type") != "data":
+                    continue
+
+                try:
+                    allocated_kb = int(pack["allocated"])
+                    used_kb = int(pack["used"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+
+                entries.append(
+                    {
+                        "allocated_kb": allocated_kb,
+                        "used_kb": used_kb,
+                        "next_expiration": pack.get("nextExpirationDate", ""),
+                    }
+                )
+
+        if not entries:
+            raise RuntimeError("No data usage entries found in offers response.")
+
+        return entries
+
+    def _update_from_api(self):
+        contract_id = self._get_contract_id()
+        self._account_balance = self._get_balance_value(contract_id)
+
+        entries = self._get_data_entries(contract_id)
+        total_allocated_kb = sum(item["allocated_kb"] for item in entries)
+        total_used_kb = sum(item["used_kb"] for item in entries)
+
+        self._total_data_volume = round(total_allocated_kb / (1024 * 1024), 2)
+        self._remaining_data_volume = round(
+            (total_allocated_kb - total_used_kb) / (1024 * 1024), 2
+        )
+
+        parsed_dates = [
+            self._parse_datetime(item["next_expiration"]) for item in entries
+        ]
+        parsed_dates = [item for item in parsed_dates if item is not None]
+        self._end_date = min(parsed_dates) if parsed_dates else None
+        self._start_date = (
+            self._end_date - timedelta(days=28) if self._end_date else None
+        )
 
     def logged_in(self):
-        """
-        Check if user is logged in.
+        """Check whether the portal still accepts the current session."""
+        self.logger.debug("Checking login status")
+        try:
+            response = self.session.get(
+                PORTAL_OVERVIEW_URL, allow_redirects=False, timeout=15
+            )
+        except requests.RequestException:
+            return False
 
-        Returns:
-            bool: True if logged in, False otherwise.
-        """
-        self.logger.debug("Checking login status...")
-        dashboard = self.session.get(DASHBOARD_URL)
-        login_status = '<ul class="nav-items level-0">' in dashboard.text
-        self.logger.debug("Login status: %s", login_status)
-        return login_status
+        if response.status_code in (301, 302, 303, 307, 308):
+            location = response.headers.get("Location", "")
+            if (
+                AUTH_BASE in location
+                or "login" in location.lower()
+                or "signin" in location.lower()
+            ):
+                return False
+
+        return response.status_code == 200
 
     def update(self):
         """Update account information."""
-        dashboard = self._fetch_dashboard()
-        self._parse_dashboard(dashboard)
+        if not self.logged_in():
+            self._login()
+
+        try:
+            self._update_from_api()
+        except (requests.RequestException, RuntimeError, ValueError):
+            if self.logged_in():
+                raise
+            self._login()
+            self._update_from_api()
 
     def get_data(self, update=True):
         """Get data."""
@@ -189,7 +416,7 @@ class AldiTalk:
         return self._remaining_data_volume
 
     def get_total_data_volume(self):
-        """Get remaining data usage."""
+        """Get total data usage."""
         return self._total_data_volume
 
     def get_end_date(self):
@@ -198,7 +425,8 @@ class AldiTalk:
 
     def get_start_date(self):
         """Get start date (28 days before end date)."""
+        if self._start_date:
+            return self._start_date
         if self._end_date:
             return self._end_date - timedelta(days=28)
-        else:
-            return None
+        return None
