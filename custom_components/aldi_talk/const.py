@@ -2,4 +2,4 @@
 
 DOMAIN = "aldi_talk"
 
-DEFAULT_SCAN_INTERVAL = 30  # Minutes
+DEFAULT_SCAN_INTERVAL = 60  # Minutes
