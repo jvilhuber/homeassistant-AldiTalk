@@ -1,5 +1,24 @@
 {
     "title": "Aldi Talk",
+    "entity": {
+        "sensor": {
+            "remaining_data_volume": {
+                "name": "Remaining data volume"
+            },
+            "total_data_volume": {
+                "name": "Total data volume"
+            },
+            "start_date": {
+                "name": "Start date"
+            },
+            "end_date": {
+                "name": "End date"
+            },
+            "account_balance": {
+                "name": "Account balance"
+            }
+        }
+    },
     "config": {
         "step": {
             "user": {

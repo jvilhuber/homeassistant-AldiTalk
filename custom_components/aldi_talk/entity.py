@@ -18,7 +18,7 @@ class AldiTalkCoordinatorEntity(CoordinatorEntity):
             "username"
         )
         self._attr_unique_id = f"{stable_id}_{sensor['key']}"
-        self._attr_name = sensor["name"]
+        self._attr_translation_key = sensor["translation_key"]
         self._attr_icon = sensor["icon"]
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, stable_id)},

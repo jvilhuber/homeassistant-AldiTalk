@@ -20,6 +20,34 @@ from .entity import AldiTalkCoordinatorEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+SENSOR_DESCRIPTIONS = [
+    {
+        "key": "remaining_data_volume",
+        "translation_key": "remaining_data_volume",
+        "icon": "mdi:access-point",
+    },
+    {
+        "key": "total_data_volume",
+        "translation_key": "total_data_volume",
+        "icon": "mdi:access-point-check",
+    },
+    {
+        "key": "start_date",
+        "translation_key": "start_date",
+        "icon": "mdi:calendar",
+    },
+    {
+        "key": "end_date",
+        "translation_key": "end_date",
+        "icon": "mdi:calendar",
+    },
+    {
+        "key": "account_balance",
+        "translation_key": "account_balance",
+        "icon": "mdi:cash-multiple",
+    },
+]
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -29,46 +57,11 @@ async def async_setup_entry(
     coordinator: AldiTalkCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities = [
-        RemainingVolumeSensor(
-            {
-                "key": "remaining_data_volume",
-                "name": "Remaining Data Volume",
-                "icon": "mdi:access-point",
-            },
-            coordinator,
-        ),
-        VolumeSensor(
-            {
-                "key": "total_data_volume",
-                "name": "Total Data Volume",
-                "icon": "mdi:access-point-check",
-            },
-            coordinator,
-        ),
-        DateSensor(
-            {
-                "key": "start_date",
-                "name": "Start Day",
-                "icon": "mdi:calendar",
-            },
-            coordinator,
-        ),
-        DateSensor(
-            {
-                "key": "end_date",
-                "name": "End Day",
-                "icon": "mdi:calendar",
-            },
-            coordinator,
-        ),
-        BalanceSensor(
-            {
-                "key": "account_balance",
-                "name": "Account Balance",
-                "icon": "mdi:cash-multiple",
-            },
-            coordinator,
-        ),
+        RemainingVolumeSensor(SENSOR_DESCRIPTIONS[0], coordinator),
+        VolumeSensor(SENSOR_DESCRIPTIONS[1], coordinator),
+        DateSensor(SENSOR_DESCRIPTIONS[2], coordinator),
+        DateSensor(SENSOR_DESCRIPTIONS[3], coordinator),
+        BalanceSensor(SENSOR_DESCRIPTIONS[4], coordinator),
     ]
 
     async_add_entities(entities)
