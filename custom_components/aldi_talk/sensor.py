@@ -75,6 +75,8 @@ class VolumeSensor(AldiTalkCoordinatorEntity, SensorEntity):
 
         self._attr_device_class = SensorDeviceClass.DATA_SIZE
         self._attr_native_unit_of_measurement = UnitOfInformation.GIGABYTES
+        self._attr_suggested_unit_of_measurement = UnitOfInformation.GIGABYTES
+        self._attr_suggested_display_precision = 1
 
 
 class RemainingVolumeSensor(VolumeSensor):
