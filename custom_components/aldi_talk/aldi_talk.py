@@ -315,6 +315,9 @@ class AldiTalk:
         )
 
         entries = []
+        total_balance = payload.get("totalBalance")
+        if total_balance is None:
+            raise RuntimeError("offers response did not contain totalBalance.")
         for offer in payload.get("subscribedOffers", []):
             for pack in offer.get("pack", []):
                 if pack.get("type") != "data":
@@ -337,13 +340,17 @@ class AldiTalk:
         if not entries:
             raise RuntimeError("No data usage entries found in offers response.")
 
-        return entries
+        return entries, total_balance
 
     def _update_from_api(self):
         contract_id = self._get_contract_id()
-        self._account_balance = self._get_balance_value(contract_id)
-
-        entries = self._get_data_entries(contract_id)
+        # Get entries and total balance from the offers endpoint to minimize requests
+        entries, total_balance = self._get_data_entries(contract_id)
+        # store account balance (expects numeric)
+        try:
+            self._account_balance = float(total_balance)
+        except (TypeError, ValueError):
+            raise RuntimeError("totalBalance from offers is not a valid number")
         total_allocated_kb = sum(item["allocated_kb"] for item in entries)
         total_used_kb = sum(item["used_kb"] for item in entries)
 
