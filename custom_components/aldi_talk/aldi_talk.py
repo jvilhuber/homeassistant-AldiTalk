@@ -17,7 +17,6 @@ PORTAL_OVERVIEW_URL = f"{PORTAL_BASE}/portal/auth/uebersicht/"
 
 BFF207 = "/scs/bff/scs-207-customer-master-data-bff/customer-master-data"
 BFF209 = "/scs/bff/scs-209-selfcare-dashboard-bff/selfcare-dashboard"
-BFF215 = "/scs/bff/scs-215-manage-topup-bff/manage-topup"
 
 
 class AldiTalk:
@@ -43,6 +42,9 @@ class AldiTalk:
         self._total_data_volume = None
         self._start_date = None
         self._end_date = None
+        self._contract_id = None
+        self._first_name = None
+        self._offer_name = None
 
     def _portal_json_headers(self):
         return {
@@ -297,16 +299,32 @@ class AldiTalk:
             raise RuntimeError("navigation-list response did not contain a contractId.")
         return contract_id
 
+    def _get_account_identity(self):
+        params = {}
+        msisdn = self._decode_msisdn()
+        if msisdn:
+            params["msisdn"] = msisdn
+
+        payload = self._request_portal_json(
+            f"{BFF207}/v1/navigation-list", params=params
+        )
+        user_details = payload.get("userDetails", {})
+        subscriptions = user_details.get("subscriptions", [])
+        if not subscriptions:
+            raise RuntimeError(
+                "No Aldi Talk subscription found in navigation-list response."
+            )
+
+        contract_id = subscriptions[0].get("contractId")
+        if not contract_id:
+            raise RuntimeError("navigation-list response did not contain a contractId.")
+
+        first_name = user_details.get("firstName") or ""
+        return contract_id, first_name
+
     def get_contract_id(self):
         """Public accessor for contract id."""
         return self._get_contract_id()
-
-    def _get_balance_value(self, contract_id):
-        payload = self._request_portal_json(f"{BFF215}/v1/totalBalance/{contract_id}")
-        balance = payload.get("totalBalance")
-        if balance is None:
-            raise RuntimeError("totalBalance response did not contain a balance value.")
-        return float(balance)
 
     def _get_data_entries(self, contract_id):
         payload = self._request_portal_json(
@@ -318,6 +336,16 @@ class AldiTalk:
         total_balance = payload.get("totalBalance")
         if total_balance is None:
             raise RuntimeError("offers response did not contain totalBalance.")
+
+        subscribed_offers = payload.get("subscribedOffers", [])
+        offer_name = next(
+            (
+                offer.get("offerName")
+                for offer in subscribed_offers
+                if offer.get("offerName")
+            ),
+            "",
+        )
         for offer in payload.get("subscribedOffers", []):
             for pack in offer.get("pack", []):
                 if pack.get("type") != "data":
@@ -340,17 +368,19 @@ class AldiTalk:
         if not entries:
             raise RuntimeError("No data usage entries found in offers response.")
 
-        return entries, total_balance
+        return entries, total_balance, offer_name
 
     def _update_from_api(self):
-        contract_id = self._get_contract_id()
+        contract_id, first_name = self._get_account_identity()
         # Get entries and total balance from the offers endpoint to minimize requests
-        entries, total_balance = self._get_data_entries(contract_id)
+        entries, total_balance, offer_name = self._get_data_entries(contract_id)
         # store account balance (expects numeric)
         try:
             self._account_balance = float(total_balance)
-        except (TypeError, ValueError):
-            raise RuntimeError("totalBalance from offers is not a valid number")
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                "totalBalance from offers is not a valid number"
+            ) from exc
         total_allocated_kb = sum(item["allocated_kb"] for item in entries)
         total_used_kb = sum(item["used_kb"] for item in entries)
 
@@ -367,6 +397,10 @@ class AldiTalk:
         self._start_date = (
             self._end_date - timedelta(days=28) if self._end_date else None
         )
+
+        self._contract_id = contract_id
+        self._first_name = first_name
+        self._offer_name = offer_name
 
     def logged_in(self):
         """Check whether the portal still accepts the current session."""
@@ -412,6 +446,9 @@ class AldiTalk:
             "total_data_volume": self._total_data_volume,
             "start_date": self.get_start_date(),
             "end_date": self._end_date,
+            "contract_id": getattr(self, "_contract_id", None),
+            "first_name": getattr(self, "_first_name", None),
+            "offer_name": getattr(self, "_offer_name", None),
         }
 
     def get_account_balance(self):
