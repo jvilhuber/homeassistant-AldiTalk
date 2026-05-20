@@ -33,7 +33,8 @@
             "already_configured": "Gerät ist bereits konfiguriert"
         },
         "error": {
-            "invalid_auth": "Ungültiger Benutzername oder Passwort"
+            "invalid_auth": "Ungültiger Benutzername oder Passwort",
+            "cannot_connect": "Verbindung nicht möglich.\nSiehe Home Assistant-Logs für weitere Informationen."
         }
     }
 }
