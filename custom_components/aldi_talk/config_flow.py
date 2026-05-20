@@ -1,5 +1,6 @@
 from typing_extensions import Self
 
+import logging
 import voluptuous as vol
 from requests.exceptions import RequestException
 from homeassistant import config_entries
@@ -7,10 +8,22 @@ from homeassistant.exceptions import HomeAssistantError
 from .aldi_talk import AldiTalk
 from .const import DOMAIN
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def is_matching(self, other_flow: Self) -> bool:
         return False
+
+    def _show_connection_error(self, error: Exception):
+        _LOGGER.exception("Cannot connect while setting up Aldi Talk: %s", error)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {vol.Required("username"): str, vol.Required("password"): str}
+            ),
+            errors={"base": "cannot_connect"},
+        )
 
     async def async_step_user(self, user_input: dict[str, str] | None = None):
         if user_input is not None:
@@ -29,22 +42,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     errors={"base": "invalid_auth"},
                 )
-            except RequestException:
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=vol.Schema(
-                        {vol.Required("username"): str, vol.Required("password"): str}
-                    ),
-                    errors={"base": "cannot_connect"},
-                )
-            except (RuntimeError, HomeAssistantError):
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=vol.Schema(
-                        {vol.Required("username"): str, vol.Required("password"): str}
-                    ),
-                    errors={"base": "cannot_connect"},
-                )
+            except RequestException as error:
+                return self._show_connection_error(error)
+            except (RuntimeError, HomeAssistantError) as error:
+                return self._show_connection_error(error)
 
             # Use contract_id as the stable unique id for the config entry
             await self.async_set_unique_id(contract_id)
