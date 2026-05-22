@@ -28,6 +28,11 @@ SENSOR_DESCRIPTIONS = [
         "icon": "mdi:access-point",
     },
     {
+        "key": "remaining_data_percentage",
+        "translation_key": "remaining_data_percentage",
+        "icon": "mdi:percent-outline",
+    },
+    {
         "key": "total_data_volume",
         "translation_key": "total_data_volume",
         "icon": "mdi:access-point-check",
@@ -76,12 +81,18 @@ async def async_setup_entry(
                 registry.async_remove(entity_entry.entity_id)
 
     entities = [
-        RemainingVolumeSensor(SENSOR_DESCRIPTIONS[0], coordinator),
-        VolumeSensor(SENSOR_DESCRIPTIONS[1], coordinator),
-        DateSensor(SENSOR_DESCRIPTIONS[2], coordinator),
-        DateSensor(SENSOR_DESCRIPTIONS[3], coordinator),
-        BalanceSensor(SENSOR_DESCRIPTIONS[4], coordinator),
+        BalanceSensor(SENSOR_DESCRIPTIONS[5], coordinator),
     ]
+
+    if supports_data_sensors:
+        entities = [
+            RemainingVolumeSensor(SENSOR_DESCRIPTIONS[0], coordinator),
+            PercentageSensor(SENSOR_DESCRIPTIONS[1], coordinator),
+            VolumeSensor(SENSOR_DESCRIPTIONS[2], coordinator),
+            DateSensor(SENSOR_DESCRIPTIONS[3], coordinator),
+            DateSensor(SENSOR_DESCRIPTIONS[4], coordinator),
+            BalanceSensor(SENSOR_DESCRIPTIONS[5], coordinator),
+        ]
 
     async_add_entities(entities)
 
@@ -104,6 +115,17 @@ class RemainingVolumeSensor(VolumeSensor):
         super().__init__(sensor, coordinator)
         self._attr_state_class = SensorStateClass.TOTAL
         self._attr_last_reset = coordinator.api_data.get("start_date")
+
+
+class PercentageSensor(AldiTalkCoordinatorEntity, SensorEntity):
+
+    def __init__(self, sensor, coordinator):
+        """Initialize the sensor."""
+        super().__init__(coordinator, sensor)
+
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_suggested_display_precision = 1
 
 
 class DateSensor(AldiTalkCoordinatorEntity, SensorEntity):

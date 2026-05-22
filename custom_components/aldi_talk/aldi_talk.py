@@ -40,6 +40,7 @@ class AldiTalk:
         self._account_balance = None
         self._remaining_data_volume = None
         self._total_data_volume = None
+        self._remaining_data_percentage = None
         self._start_date = None
         self._end_date = None
         self._contract_id = None
@@ -387,14 +388,32 @@ class AldiTalk:
             total_allocated_kb = sum(item["allocated_kb"] for item in entries)
             total_used_kb = sum(item["used_kb"] for item in entries)
 
-        parsed_dates = [
-            self._parse_datetime(item["next_expiration"]) for item in entries
-        ]
-        parsed_dates = [item for item in parsed_dates if item is not None]
-        self._end_date = min(parsed_dates) if parsed_dates else None
-        self._start_date = (
-            self._end_date - timedelta(days=28) if self._end_date else None
-        )
+            self._total_data_volume = round(total_allocated_kb / (1024 * 1024), 2)
+            self._remaining_data_volume = round(
+                (total_allocated_kb - total_used_kb) / (1024 * 1024), 2
+            )
+            if self._total_data_volume:
+                self._remaining_data_percentage = round(
+                    (self._remaining_data_volume / self._total_data_volume) * 100,
+                    1,
+                )
+            else:
+                self._remaining_data_percentage = 0.0
+
+            parsed_dates = [
+                self._parse_datetime(item["next_expiration"]) for item in entries
+            ]
+            parsed_dates = [item for item in parsed_dates if item is not None]
+            self._end_date = min(parsed_dates) if parsed_dates else None
+            self._start_date = (
+                self._end_date - timedelta(days=28) if self._end_date else None
+            )
+        else:
+            self._total_data_volume = None
+            self._remaining_data_volume = None
+            self._remaining_data_percentage = None
+            self._start_date = None
+            self._end_date = None
 
         self._contract_id = contract_id
         self._first_name = first_name
@@ -442,6 +461,7 @@ class AldiTalk:
             "account_balance": self._account_balance,
             "remaining_data_volume": self._remaining_data_volume,
             "total_data_volume": self._total_data_volume,
+            "remaining_data_percentage": self._remaining_data_percentage,
             "start_date": self.get_start_date(),
             "end_date": self._end_date,
             "contract_id": getattr(self, "_contract_id", None),

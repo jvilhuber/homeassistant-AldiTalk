@@ -5,6 +5,9 @@
             "remaining_data_volume": {
                 "name": "Verbleibendes Datenvolumen"
             },
+            "remaining_data_percentage": {
+                "name": "Verbleibendes Datenvolumen in Prozent"
+            },
             "total_data_volume": {
                 "name": "Gesamtes Datenvolumen"
             },
