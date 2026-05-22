@@ -12,6 +12,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CURRENCY_EURO, UnitOfInformation
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
@@ -55,6 +56,24 @@ async def async_setup_entry(
     """Set up the AldiTalk sensors."""
 
     coordinator: AldiTalkCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    supports_data_sensors = coordinator.api_data.get("supports_data_sensors", True)
+
+    if not supports_data_sensors:
+        registry = er.async_get(hass)
+        stale_keys = {
+            "remaining_data_volume",
+            "remaining_data_percentage",
+            "total_data_volume",
+            "start_date",
+            "end_date",
+        }
+        for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if entity_entry.domain != "sensor" or not entity_entry.unique_id:
+                continue
+
+            if any(entity_entry.unique_id.endswith(f"_{key}") for key in stale_keys):
+                registry.async_remove(entity_entry.entity_id)
 
     entities = [
         RemainingVolumeSensor(SENSOR_DESCRIPTIONS[0], coordinator),

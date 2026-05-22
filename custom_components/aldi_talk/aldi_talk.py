@@ -346,6 +346,7 @@ class AldiTalk:
             ),
             "",
         )
+        supports_data_sensors = False
         for offer in payload.get("subscribedOffers", []):
             for pack in offer.get("pack", []):
                 if pack.get("type") != "data":
@@ -357,6 +358,8 @@ class AldiTalk:
                 except (KeyError, TypeError, ValueError):
                     continue
 
+                supports_data_sensors = True
+
                 entries.append(
                     {
                         "allocated_kb": allocated_kb,
@@ -365,15 +368,14 @@ class AldiTalk:
                     }
                 )
 
-        if not entries:
-            raise RuntimeError("No data usage entries found in offers response.")
-
-        return entries, total_balance, offer_name
+        return entries, total_balance, offer_name, supports_data_sensors
 
     def _update_from_api(self):
         contract_id, first_name = self._get_account_identity()
         # Get entries and total balance from the offers endpoint to minimize requests
-        entries, total_balance, offer_name = self._get_data_entries(contract_id)
+        entries, total_balance, offer_name, supports_data_sensors = (
+            self._get_data_entries(contract_id)
+        )
         # store account balance (expects numeric)
         try:
             self._account_balance = float(total_balance)
@@ -381,13 +383,9 @@ class AldiTalk:
             raise RuntimeError(
                 "totalBalance from offers is not a valid number"
             ) from exc
-        total_allocated_kb = sum(item["allocated_kb"] for item in entries)
-        total_used_kb = sum(item["used_kb"] for item in entries)
-
-        self._total_data_volume = round(total_allocated_kb / (1024 * 1024), 2)
-        self._remaining_data_volume = round(
-            (total_allocated_kb - total_used_kb) / (1024 * 1024), 2
-        )
+        if supports_data_sensors and entries:
+            total_allocated_kb = sum(item["allocated_kb"] for item in entries)
+            total_used_kb = sum(item["used_kb"] for item in entries)
 
         parsed_dates = [
             self._parse_datetime(item["next_expiration"]) for item in entries
@@ -449,6 +447,7 @@ class AldiTalk:
             "contract_id": getattr(self, "_contract_id", None),
             "first_name": getattr(self, "_first_name", None),
             "offer_name": getattr(self, "_offer_name", None),
+            "supports_data_sensors": self._remaining_data_volume is not None,
         }
 
     def get_account_balance(self):
