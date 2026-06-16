@@ -19,6 +19,15 @@
             },
             "account_balance": {
                 "name": "Account balance"
+            },
+            "datapack_remaining_volume": {
+                "name": "Data Pack {pack_number} Remaining"
+            },
+            "datapack_percentage": {
+                "name": "Data Pack {pack_number} Percentage"
+            },
+            "datapack_total_volume": {
+                "name": "Data Pack {pack_number} Total"
             }
         }
     },
