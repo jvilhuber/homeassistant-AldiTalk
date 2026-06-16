@@ -61,7 +61,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the AldiTalk sensors."""
 
-    coordinator: AldiTalkCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: AldiTalkCoordinator = entry.runtime_data
 
     supports_data_sensors = coordinator.api_data.get("supports_data_sensors", True)
 
@@ -95,7 +95,6 @@ async def async_setup_entry(
             VolumeSensor(SENSOR_DESCRIPTIONS[2], coordinator),
             DateSensor(SENSOR_DESCRIPTIONS[3], coordinator),
             DateSensor(SENSOR_DESCRIPTIONS[4], coordinator),
-            BalanceSensor(SENSOR_DESCRIPTIONS[5], coordinator),
         ]
 
         # Individual sensors for each data pack, but only if more than one pack exists
@@ -145,7 +144,6 @@ class RemainingVolumeSensor(VolumeSensor):
     def __init__(self, sensor, coordinator):
         super().__init__(sensor, coordinator)
         self._attr_state_class = SensorStateClass.TOTAL
-        self._attr_last_reset = coordinator.api_data.get("start_date")
 
 
 class PercentageSensor(AldiTalkCoordinatorEntity, SensorEntity):

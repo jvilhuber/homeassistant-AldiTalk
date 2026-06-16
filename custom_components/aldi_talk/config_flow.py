@@ -12,7 +12,17 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    def __init__(self) -> None:
+        """Initialize the config flow."""
+        super().__init__()
+        self._user_input: dict[str, str] | None = None
+
     def is_matching(self, other_flow: Self) -> bool:
+        """Return True if this flow matches another flow (same username)."""
+        if self._user_input and hasattr(other_flow, "_user_input"):
+            other_input = other_flow._user_input
+            if other_input:
+                return self._user_input.get("username") == other_input.get("username")
         return False
 
     def _show_connection_error(self, error: Exception):
@@ -27,6 +37,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, str] | None = None):
         if user_input is not None:
+            # Store username for is_matching comparison
+            self._user_input = user_input
+
             api = AldiTalk(user_input["username"], user_input["password"])
             try:
                 # Validate credentials and fetch account data in executor

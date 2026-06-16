@@ -23,13 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = AldiTalkCoordinator(hass, entry)
 
-    # Store coordinator for backwards compatibility and in entry.runtime_data
-    hass.data[DOMAIN][entry.entry_id] = coordinator
-    try:
-        entry.runtime_data["coordinator"] = coordinator
-    except AttributeError:
-        # Older HA versions may not support runtime_data assignment
-        pass
+    entry.runtime_data = coordinator
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -50,4 +44,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
-    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.config_entries.async_reload_entry(entry)
