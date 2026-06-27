@@ -42,4 +42,14 @@ The data will update every 30 minutes.
 
 You can change the unit of measurement via the entity configuration to display it in GB
 
+## Dashboard
+
+For a beautiful and ready-to-use way to display your Aldi Talk data on your Home Assistant dashboard, check out the custom Lovelace card designed for this integration:
+
+**[Aldi Talk Lovelace Card](https://github.com/jvilhuber/lovelace-aldi-talk-card)**
+
+It provides a clean overview of your account status, including data usage, remaining volume, and validity periods, making it easy to monitor everything at a glance.
+
+
+
 [!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/Jonas_JoKu)
