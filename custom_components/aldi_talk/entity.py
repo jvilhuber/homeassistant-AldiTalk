@@ -13,7 +13,7 @@ class AldiTalkCoordinatorEntity(CoordinatorEntity):
     _attr_has_entity_name = True
 
     def __init__(self, coordinator, sensor: dict) -> None:
-        """Initialize the Trias base entity."""
+        """Initialize the AldiTalk base entity."""
         super().__init__(coordinator)
         self._key = sensor["key"]
         stable_id = coordinator.config.get("contract_id") or coordinator.config.get(
@@ -26,12 +26,12 @@ class AldiTalkCoordinatorEntity(CoordinatorEntity):
         first_name = account_data.get("first_name") or coordinator.config.get(
             CONF_USERNAME
         )
-        offer_name = account_data.get("offer_name") or None
+        self._offer_name = account_data.get("offer_name") or None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, stable_id)},
             configuration_url="https://www.alditalk-kundenportal.de/portal/auth/uebersicht/",
             manufacturer="Aldi Talk",
-            model=offer_name,
+            model=self._offer_name,
             name=first_name,
             serial_number=coordinator.config.get("contract_id") or stable_id,
         )
@@ -40,3 +40,11 @@ class AldiTalkCoordinatorEntity(CoordinatorEntity):
     def native_value(self):
         """Return the state of the device."""
         return self.coordinator.api_data.get(self._key)
+
+    @property
+    def extra_state_attributes(self):
+        """Return additional state attributes."""
+        return {
+            "offer_name": self._offer_name,
+            "contract_id": self.coordinator.config.get("contract_id"),
+        }
