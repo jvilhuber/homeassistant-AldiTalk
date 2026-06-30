@@ -16,6 +16,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         super().__init__()
         self._user_input: dict[str, str] | None = None
+        self._reauth_entry: config_entries.ConfigEntry | None = None
 
     def is_matching(self, other_flow: Self) -> bool:
         """Return True if this flow matches another flow (same username)."""
@@ -72,4 +73,49 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {vol.Required("username"): str, vol.Required("password"): str}
             ),
+        )
+
+    async def async_step_reauth(self, entry_data: dict[str, str]):
+        """Handle re-authentication when the stored credentials stop working."""
+        self._reauth_entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"]
+        )
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, str] | None = None
+    ):
+        """Ask for the current password and update the existing entry.
+
+        The username is fixed (it identifies the account), so only the password
+        is requested. On success the entry's data is updated and reloaded, which
+        clears the ConfigEntryAuthFailed state and resumes polling.
+        """
+        assert self._reauth_entry is not None
+        username = self._reauth_entry.data["username"]
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            api = AldiTalk(username, user_input["password"])
+            try:
+                await self.hass.async_add_executor_job(api.update)
+            except ValueError:
+                errors["base"] = "invalid_auth"
+            except RequestException as error:
+                _LOGGER.exception("Cannot connect while re-authenticating: %s", error)
+                errors["base"] = "cannot_connect"
+            except (RuntimeError, HomeAssistantError) as error:
+                _LOGGER.exception("Cannot connect while re-authenticating: %s", error)
+                errors["base"] = "cannot_connect"
+            else:
+                return self.async_update_reload_and_abort(
+                    self._reauth_entry,
+                    data_updates={"password": user_input["password"]},
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Required("password"): str}),
+            description_placeholders={"username": username},
+            errors=errors,
         )

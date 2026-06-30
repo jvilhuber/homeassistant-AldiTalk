@@ -39,10 +39,18 @@
                     "username": "Benutzername",
                     "password": "Passwort"
                 }
+            },
+            "reauth_confirm": {
+                "title": "Aldi Talk neu anmelden",
+                "description": "Das gespeicherte Passwort für {username} funktioniert nicht mehr. Gib das aktuelle Passwort ein, um die Verbindung wiederherzustellen.",
+                "data": {
+                    "password": "Passwort"
+                }
             }
         },
         "abort": {
-            "already_configured": "Gerät ist bereits konfiguriert"
+            "already_configured": "Gerät ist bereits konfiguriert",
+            "reauth_successful": "Erneute Anmeldung erfolgreich"
         },
         "error": {
             "invalid_auth": "Ungültiger Benutzername oder Passwort",
