@@ -46,7 +46,6 @@ class AldiTalk:
         self._contract_id = None
         self._first_name = None
         self._offer_name = None
-        self._data_packs_raw = []
 
     def _portal_json_headers(self):
         return {
@@ -391,8 +390,6 @@ class AldiTalk:
             raise RuntimeError(
                 "totalBalance from offers is not a valid number"
             ) from exc
-        self._data_packs_raw = entries
-
         if supports_data_sensors and entries:
             total_allocated_kb = sum(item["allocated_kb"] for item in entries)
             total_used_kb = sum(item["used_kb"] for item in entries)
@@ -475,7 +472,6 @@ class AldiTalk:
             "first_name": getattr(self, "_first_name", None),
             "offer_name": getattr(self, "_offer_name", None),
             "supports_data_sensors": self._remaining_data_volume is not None,
-            "data_packs_raw": self._data_packs_raw,
         }
 
     def get_account_balance(self):
