@@ -196,19 +196,25 @@ class AldiTalk:
         self.session.get(resolved_url, allow_redirects=True, timeout=15)
 
     def _verify_logged_in(self):
+        # The portal finishes login via an OIDC authorization-code redirect
+        # chain (overview -> /signin/oauth2/authorize -> /logged-in-home-page/
+        # ?code=... -> overview). That final callback is what sets the portal
+        # session cookies. Following the redirects (allow_redirects=True)
+        # completes the exchange and lands on the overview with HTTP 200;
+        # stopping at the first 302 to the auth host aborts before the callback
+        # and misreports a successful login as failed.
         response = self.session.get(
-            PORTAL_OVERVIEW_URL, allow_redirects=False, timeout=15
+            PORTAL_OVERVIEW_URL, allow_redirects=True, timeout=15
         )
-        if response.status_code in (301, 302, 303, 307, 308):
-            location = response.headers.get("Location", "")
-            if (
-                AUTH_BASE in location
-                or "login" in location.lower()
-                or "signin" in location.lower()
-            ):
-                raise ValueError(
-                    "Login failed: portal redirected back to the auth server."
-                )
+        final_url = response.url or ""
+        if (
+            response.status_code != 200
+            or AUTH_BASE in final_url
+            or "/signin" in final_url
+        ):
+            raise ValueError(
+                "Login failed: portal did not reach the authenticated overview."
+            )
 
     def _login(self):
         self.logger.debug("Attempting Aldi Talk OAuth login")
@@ -426,20 +432,18 @@ class AldiTalk:
         """Check whether the portal still accepts the current session."""
         self.logger.debug("Checking login status")
         try:
+            # Follow the OIDC redirect chain (see _verify_logged_in): a live
+            # session lands on the overview with HTTP 200, while an expired one
+            # ends on the auth server's sign-in page.
             response = self.session.get(
-                PORTAL_OVERVIEW_URL, allow_redirects=False, timeout=15
+                PORTAL_OVERVIEW_URL, allow_redirects=True, timeout=15
             )
         except requests.RequestException:
             return False
 
-        if response.status_code in (301, 302, 303, 307, 308):
-            location = response.headers.get("Location", "")
-            if (
-                AUTH_BASE in location
-                or "login" in location.lower()
-                or "signin" in location.lower()
-            ):
-                return False
+        final_url = response.url or ""
+        if AUTH_BASE in final_url or "/signin" in final_url:
+            return False
 
         return response.status_code == 200
 
