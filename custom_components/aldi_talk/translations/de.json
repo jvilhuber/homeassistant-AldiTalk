@@ -19,6 +19,15 @@
             },
             "account_balance": {
                 "name": "Kontostand"
+            },
+            "eu_roaming_remaining_data_volume": {
+                "name": "EU Roaming verbleibendes Datenvolumen"
+            },
+            "eu_roaming_remaining_data_percentage": {
+                "name": "EU Roaming verbleibendes Datenvolumen in Prozent"
+            },
+            "eu_roaming_total_data_volume": {
+                "name": "EU Roaming gesamtes Datenvolumen"
             }
         }
     },

@@ -15,7 +15,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
 from .coordinator import AldiTalkCoordinator
 from .entity import AldiTalkCoordinatorEntity
 
@@ -52,6 +51,21 @@ SENSOR_DESCRIPTIONS = [
         "translation_key": "account_balance",
         "icon": "mdi:cash-multiple",
     },
+    {
+        "key": "eu_roaming_remaining_data_volume",
+        "translation_key": "eu_roaming_remaining_data_volume",
+        "icon": "mdi:earth",
+    },
+    {
+        "key": "eu_roaming_remaining_data_percentage",
+        "translation_key": "eu_roaming_remaining_data_percentage",
+        "icon": "mdi:percent-outline",
+    },
+    {
+        "key": "eu_roaming_total_data_volume",
+        "translation_key": "eu_roaming_total_data_volume",
+        "icon": "mdi:earth-box",
+    },
 ]
 
 
@@ -63,6 +77,9 @@ async def async_setup_entry(
     coordinator: AldiTalkCoordinator = entry.runtime_data
 
     supports_data_sensors = coordinator.api_data.get("supports_data_sensors", True)
+    supports_eu_roaming_data_sensors = coordinator.api_data.get(
+        "supports_eu_roaming_data_sensors", False
+    )
 
     if not supports_data_sensors:
         registry = er.async_get(hass)
@@ -72,6 +89,20 @@ async def async_setup_entry(
             "total_data_volume",
             "start_date",
             "end_date",
+        }
+        for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if entity_entry.domain != "sensor" or not entity_entry.unique_id:
+                continue
+
+            if any(entity_entry.unique_id.endswith(f"_{key}") for key in stale_keys):
+                registry.async_remove(entity_entry.entity_id)
+
+    if not supports_eu_roaming_data_sensors:
+        registry = er.async_get(hass)
+        stale_keys = {
+            "eu_roaming_remaining_data_volume",
+            "eu_roaming_remaining_data_percentage",
+            "eu_roaming_total_data_volume",
         }
         for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
             if entity_entry.domain != "sensor" or not entity_entry.unique_id:
@@ -91,6 +122,13 @@ async def async_setup_entry(
             VolumeSensor(SENSOR_DESCRIPTIONS[2], coordinator),
             DateSensor(SENSOR_DESCRIPTIONS[3], coordinator),
             DateSensor(SENSOR_DESCRIPTIONS[4], coordinator),
+        ]
+
+    if supports_eu_roaming_data_sensors:
+        entities += [
+            RemainingVolumeSensor(SENSOR_DESCRIPTIONS[6], coordinator),
+            PercentageSensor(SENSOR_DESCRIPTIONS[7], coordinator),
+            VolumeSensor(SENSOR_DESCRIPTIONS[8], coordinator),
         ]
 
     async_add_entities(entities)

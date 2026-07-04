@@ -41,6 +41,9 @@ class AldiTalk:
         self._remaining_data_volume = None
         self._total_data_volume = None
         self._remaining_data_percentage = None
+        self._eu_roaming_remaining_data_volume = None
+        self._eu_roaming_total_data_volume = None
+        self._eu_roaming_remaining_data_percentage = None
         self._start_date = None
         self._end_date = None
         self._contract_id = None
@@ -353,7 +356,6 @@ class AldiTalk:
             ),
             "",
         )
-        supports_data_sensors = False
         for offer in payload.get("subscribedOffers", []):
             for pack in offer.get("pack", []):
                 if pack.get("type") != "data":
@@ -365,24 +367,43 @@ class AldiTalk:
                 except (KeyError, TypeError, ValueError):
                     continue
 
-                supports_data_sensors = True
-
                 entries.append(
                     {
                         "allocated_kb": allocated_kb,
                         "used_kb": used_kb,
                         "next_expiration": pack.get("nextExpirationDate", ""),
+                        "balance_attribute_reference": pack.get(
+                            "balanceAttributeReference", ""
+                        ),
                     }
                 )
 
-        return entries, total_balance, offer_name, supports_data_sensors
+        return entries, total_balance, offer_name
+
+    def _calculate_data_metrics(self, entry):
+        allocated_kb = entry["allocated_kb"]
+        used_kb = entry["used_kb"]
+        total_data_volume = round(allocated_kb / (1024 * 1024), 2)
+        remaining_data_volume = round((allocated_kb - used_kb) / (1024 * 1024), 2)
+
+        if total_data_volume:
+            remaining_data_percentage = round(
+                (remaining_data_volume / total_data_volume) * 100,
+                1,
+            )
+        else:
+            remaining_data_percentage = 0.0
+
+        return {
+            "total_data_volume": total_data_volume,
+            "remaining_data_volume": remaining_data_volume,
+            "remaining_data_percentage": remaining_data_percentage,
+        }
 
     def _update_from_api(self):
         contract_id, first_name = self._get_account_identity()
         # Get entries and total balance from the offers endpoint to minimize requests
-        entries, total_balance, offer_name, supports_data_sensors = (
-            self._get_data_entries(contract_id)
-        )
+        entries, total_balance, offer_name = self._get_data_entries(contract_id)
         # store account balance (expects numeric)
         try:
             self._account_balance = float(total_balance)
@@ -390,27 +411,26 @@ class AldiTalk:
             raise RuntimeError(
                 "totalBalance from offers is not a valid number"
             ) from exc
-        if supports_data_sensors and entries:
-            total_allocated_kb = sum(item["allocated_kb"] for item in entries)
-            total_used_kb = sum(item["used_kb"] for item in entries)
 
-            self._total_data_volume = round(total_allocated_kb / (1024 * 1024), 2)
-            self._remaining_data_volume = round(
-                (total_allocated_kb - total_used_kb) / (1024 * 1024), 2
-            )
-            if self._total_data_volume:
-                self._remaining_data_percentage = round(
-                    (self._remaining_data_volume / self._total_data_volume) * 100,
-                    1,
-                )
-            else:
-                self._remaining_data_percentage = 0.0
+        standard_entry = entries[0] if entries else None
+        eu_roaming_entry = next(
+            (
+                item
+                for item in entries
+                if item.get("balance_attribute_reference") == "dataGrantAmountFUP"
+            ),
+            None,
+        )
 
-            parsed_dates = [
-                self._parse_datetime(item["next_expiration"]) for item in entries
+        if standard_entry:
+            standard_metrics = self._calculate_data_metrics(standard_entry)
+            self._total_data_volume = standard_metrics["total_data_volume"]
+            self._remaining_data_volume = standard_metrics["remaining_data_volume"]
+            self._remaining_data_percentage = standard_metrics[
+                "remaining_data_percentage"
             ]
-            parsed_dates = [item for item in parsed_dates if item is not None]
-            self._end_date = min(parsed_dates) if parsed_dates else None
+
+            self._end_date = self._parse_datetime(standard_entry.get("next_expiration"))
             self._start_date = (
                 self._end_date - timedelta(days=28) if self._end_date else None
             )
@@ -420,6 +440,20 @@ class AldiTalk:
             self._remaining_data_percentage = None
             self._start_date = None
             self._end_date = None
+
+        if eu_roaming_entry:
+            eu_roaming_metrics = self._calculate_data_metrics(eu_roaming_entry)
+            self._eu_roaming_total_data_volume = eu_roaming_metrics["total_data_volume"]
+            self._eu_roaming_remaining_data_volume = eu_roaming_metrics[
+                "remaining_data_volume"
+            ]
+            self._eu_roaming_remaining_data_percentage = eu_roaming_metrics[
+                "remaining_data_percentage"
+            ]
+        else:
+            self._eu_roaming_total_data_volume = None
+            self._eu_roaming_remaining_data_volume = None
+            self._eu_roaming_remaining_data_percentage = None
 
         self._contract_id = contract_id
         self._first_name = first_name
@@ -466,12 +500,17 @@ class AldiTalk:
             "remaining_data_volume": self._remaining_data_volume,
             "total_data_volume": self._total_data_volume,
             "remaining_data_percentage": self._remaining_data_percentage,
+            "eu_roaming_remaining_data_volume": self._eu_roaming_remaining_data_volume,
+            "eu_roaming_total_data_volume": self._eu_roaming_total_data_volume,
+            "eu_roaming_remaining_data_percentage": self._eu_roaming_remaining_data_percentage,
             "start_date": self.get_start_date(),
             "end_date": self._end_date,
             "contract_id": getattr(self, "_contract_id", None),
             "first_name": getattr(self, "_first_name", None),
             "offer_name": getattr(self, "_offer_name", None),
             "supports_data_sensors": self._remaining_data_volume is not None,
+            "supports_eu_roaming_data_sensors": self._eu_roaming_remaining_data_volume
+            is not None,
         }
 
     def get_account_balance(self):

@@ -19,6 +19,15 @@
             },
             "account_balance": {
                 "name": "Account balance"
+            },
+            "eu_roaming_remaining_data_volume": {
+                "name": "EU Roaming remaining data volume"
+            },
+            "eu_roaming_remaining_data_percentage": {
+                "name": "EU Roaming remaining data percentage"
+            },
+            "eu_roaming_total_data_volume": {
+                "name": "EU Roaming total data volume"
             }
         }
     },
