@@ -25,17 +25,7 @@ class AldiTalk:
     def __init__(self, username: str, password: str):
         self.username = username
         self.password = password
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": (
-                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                ),
-                "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            }
-        )
+        self._reset_session()
         self.logger = logging.getLogger(__name__)
         self._account_balance = None
         self._remaining_data_volume = None
@@ -47,6 +37,24 @@ class AldiTalk:
         self._first_name = None
         self._offer_name = None
         self._data_packs_raw = []
+
+    def _reset_session(self):
+        # A fresh session (empty cookie jar) is required before every login.
+        # The ForgeRock/OIDC login chain fails if stale, expired portal cookies
+        # from a previous session are still present, so reusing the same session
+        # to re-login makes valid credentials look rejected. Starting clean
+        # mirrors what the config-flow reauth does with a new AldiTalk instance.
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                ),
+                "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            }
+        )
 
     def _portal_json_headers(self):
         return {
@@ -212,6 +220,7 @@ class AldiTalk:
 
     def _login(self):
         self.logger.debug("Attempting Aldi Talk OAuth login")
+        self._reset_session()
         self._start_portal_flow()
         auth_id, callbacks = self._fetch_auth_callbacks()
         pow_work, pow_difficulty = self._extract_pow_info(callbacks)
